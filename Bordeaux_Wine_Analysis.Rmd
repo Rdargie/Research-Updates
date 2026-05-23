@@ -1,0 +1,66 @@
+---
+title: "**Predicting Wine Quality from Climate Data**: A Bordeaux Case Study"
+author: "Dargie Tsegay Berhe <br> dtb2434@my.utexas.edu <br> tsegadar@yahoo.com <br> The University of Texas at Austin, USA"
+date: "`r Sys.Date()`" 
+output: 
+  html_document:
+    theme: readable
+    toc: true
+---
+
+# 1. Introduction
+This project analyzes how historical climate variables—specifically temperature and rainfall—impact the quality and price of Bordeaux wines. Leveraging domain knowledge in viticulture, I process historical weather data and apply statistical modeling to predict vintage quality before the wine is even bottled.
+
+# 2. Environment Setup
+```{r setup, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(rsample)
+```
+
+#3. Data Ingestion & Wrangling
+
+```{r}
+# Pulling the dataset directly from a public repository
+data_url <- "https://raw.githubusercontent.com/egarpor/handy/master/datasets/wine.csv"
+bordeaux_raw <- read_csv(data_url)
+
+bordeaux_clean <- bordeaux_raw |>
+  drop_na(Price) |>
+  mutate(
+    Age = max(Year) - Year,
+    # Flag drought conditions during harvest (a known viticultural risk factor)
+    DryHarvest = if_else(HarvestRain < 100, "Yes", "No")
+  ) |> 
+  select(Year, Price, AGST, WinterRain, HarvestRain, Age, DryHarvest)
+```
+
+# 4. Rigorous Validation: Train/Test Split
+
+```{r}
+set.seed(2026) 
+
+# Reserve 80% of the data to train the model, hide 20% to test it later
+wine_split <- initial_split(bordeaux_clean, prop = 0.80)
+train_data <- training(wine_split)
+test_data  <- testing(wine_split)
+```
+
+# 5. Model Training and Evaluation
+```{r}
+# Train a Multiple Linear Regression model
+final_wine_model <- lm(Price ~ AGST + WinterRain + HarvestRain + Age + DryHarvest, data = train_data)
+
+# Test the model on unseen data
+test_predictions <- test_data |>
+  mutate(Predicted_Price = predict(final_wine_model, newdata = test_data))
+
+# Calculate Root Mean Squared Error (RMSE)
+test_results <- test_predictions |>
+  mutate(
+    Error = Price - Predicted_Price,
+    Squared_Error = Error^2             
+  ) |>
+  summarize(RMSE = sqrt(mean(Squared_Error)))
+
+print(test_results)
+```
